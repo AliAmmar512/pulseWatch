@@ -1,11 +1,44 @@
 import asyncio
 import httpx
 from datetime import datetime, timezone
+from config import supabaseUrl, supabaseSecretKey, resendApiKey
 from supabase import create_client
 from config import supabaseUrl, supabaseSecretKey
 import ssl
 import socket
 from datetime import date
+
+
+def getUserEmail(userId: str):
+    try:
+        response = supabase.auth.admin.get_user_by_id(userId)
+        return response.user.email
+    except Exception as e:
+        print(f"[email] failed to look up user {userId}: {e}")
+        return None
+
+
+def sendEmail(toEmail: str, subject: str, htmlBody: str):
+    if not toEmail:
+        return
+    try:
+        response = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resendApiKey}"},
+            json={
+                "from": "Pulsewatch <onboarding@resend.dev>",  # replace once you verify your own domain
+                "to": [toEmail],
+                "subject": subject,
+                "html": htmlBody,
+            },
+            timeout=10.0,
+        )
+        if response.status_code >= 400:
+            print(f"[email] failed to send to {toEmail}: {response.text}")
+        else:
+            print(f"[email] sent '{subject}' to {toEmail}")
+    except Exception as e:
+        print(f"[email] error sending to {toEmail}: {e}")
 
 
 def publishEvent(userId: str, eventType: str, siteId: str, extra: dict = None):
@@ -137,8 +170,14 @@ async def evaluateDomain(domain: dict):
                     "domain_id": domainId,
                     "days_left": daysLeft,
                 })
-            break  # only fire the most urgent applicable threshold
 
+                userEmail = getUserEmail(userId)
+                sendEmail(
+                    userEmail,
+                    f"⚠️ SSL certificate for {domainName} expires in {daysLeft} days",
+                    f"<p>The SSL certificate for <strong>{domainName}</strong> expires on <strong>{expiryDate}</strong> ({daysLeft} days left). Renew it soon to avoid downtime.</p>"
+                )
+            break
 def getOpenIncident(siteId: str):
     result = (
         supabase.table("incidents")
@@ -190,10 +229,25 @@ async def evaluateSite(client: httpx.AsyncClient, site: dict):
             createIncident(siteId)
             newIncident = getOpenIncident(siteId)
             publishEvent(userId, "incident_created", siteId, {"incident_id": newIncident["id"]})
+
+            userEmail = getUserEmail(userId)
+            sendEmail(
+                userEmail,
+                f"🔴 {url} is down",
+                f"<p>Your site <strong>{url}</strong> has failed {FAILURE_THRESHOLD} consecutive checks and is now considered down.</p>"
+            )
     else:
         if openIncident:
             resolveIncident(openIncident["id"])
             publishEvent(userId, "incident_resolved", siteId, {"incident_id": openIncident["id"]})
+
+            userEmail = getUserEmail(userId)
+            sendEmail(
+                userEmail,
+                f"✅ {url} has recovered",
+                f"<p>Your site <strong>{url}</strong> is back up and responding normally.</p>"
+            )
+
 
 lastCheckedAt = {}  # in-memory: {site_id: datetime of last check}
 TICK_INTERVAL = 5   # how often the loop wakes up to check what's due
