@@ -4,6 +4,19 @@ from datetime import datetime, timezone
 from supabase import create_client
 from config import supabaseUrl, supabaseSecretKey
 
+
+
+def publishEvent(userId: str, eventType: str, siteId: str, extra: dict = None):
+    payload = {
+        "type": eventType,
+        "user_id": userId,
+        "site_id": siteId,
+    }
+    if extra:
+        payload.update(extra)
+
+    supabase.rpc("notify_site_event", {"payload": payload}).execute()
+
 supabase = create_client(supabaseUrl, supabaseSecretKey)
 
 FAILURE_THRESHOLD = 3
@@ -76,10 +89,13 @@ def resolveIncident(incidentId: str):
 async def evaluateSite(client: httpx.AsyncClient, site: dict):
     siteId = site["id"]
     url = site["url"]
+    userId = site["user_id"]
 
     status, responseTimeMs, statusCode = await pingSite(client, url)
     recordCheck(siteId, status, responseTimeMs, statusCode)
     print(f"[check] {url} -> {status} ({responseTimeMs}ms)")
+
+    publishEvent(userId, "status_update", siteId, {"status": status})
 
     openIncident = getOpenIncident(siteId)
 
@@ -90,10 +106,12 @@ async def evaluateSite(client: httpx.AsyncClient, site: dict):
         )
         if allFailed and not openIncident:
             createIncident(siteId)
+            newIncident = getOpenIncident(siteId)
+            publishEvent(userId, "incident_created", siteId, {"incident_id": newIncident["id"]})
     else:
         if openIncident:
             resolveIncident(openIncident["id"])
-
+            publishEvent(userId, "incident_resolved", siteId, {"incident_id": openIncident["id"]})
 
 lastCheckedAt = {}  # in-memory: {site_id: datetime of last check}
 TICK_INTERVAL = 5   # how often the loop wakes up to check what's due
@@ -103,10 +121,10 @@ async def runCheckLoop():
     async with httpx.AsyncClient() as client:
         while True:
             sitesResult = (
-                supabase.table("sites")
-                .select("id, url, check_interval_seconds")
-                .eq("is_active", True)
-                .execute()
+            supabase.table("sites")
+            .select("id, url, check_interval_seconds, user_id")
+            .eq("is_active", True)
+            .execute()
             )
             sites = sitesResult.data
 
