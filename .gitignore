@@ -13,3 +13,6 @@ node_modules/
 # General
 .DS_Store
 *.log
+CLAUDE.md
+AGENTS.md
+
