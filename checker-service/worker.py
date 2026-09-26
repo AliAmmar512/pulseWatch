@@ -3,7 +3,9 @@ import httpx
 from datetime import datetime, timezone
 from supabase import create_client
 from config import supabaseUrl, supabaseSecretKey
-
+import ssl
+import socket
+from datetime import date
 
 
 def publishEvent(userId: str, eventType: str, siteId: str, extra: dict = None):
@@ -56,6 +58,86 @@ def getRecentChecks(siteId: str, limit: int = FAILURE_THRESHOLD):
     )
     return [row["status"] for row in result.data]
 
+
+def getSslInfo(hostname: str, port: int = 443, timeout: float = 10.0):
+    """Connect to a domain and retrieve its SSL certificate expiry + issuer."""
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((hostname, port), timeout=timeout) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as sslSock:
+                cert = sslSock.getpeercert()
+
+        expiryStr = cert.get("notAfter")  # e.g. 'Jun  1 12:00:00 2027 GMT'
+        expiryDate = datetime.strptime(expiryStr, "%b %d %H:%M:%S %Y %Z").date()
+
+        issuerFields = dict(x[0] for x in cert.get("issuer", []))
+        issuer = issuerFields.get("organizationName", issuerFields.get("commonName", "Unknown"))
+
+        return expiryDate, issuer, None
+    except Exception as e:
+        return None, None, str(e)
+
+
+def recordDomainCheck(domainId: str, sslExpiryDate, sslIssuer, dnsRecordsHash=None):
+    supabase.table("domain_checks").insert({
+        "domain_id": domainId,
+        "ssl_expiry_date": sslExpiryDate.isoformat() if sslExpiryDate else None,
+        "ssl_issuer": sslIssuer,
+        "dns_records_hash": dnsRecordsHash,
+    }).execute()
+
+
+def getOpenDomainAlert(domainId: str, alertType: str):
+    result = (
+        supabase.table("domain_alerts")
+        .select("id")
+        .eq("domain_id", domainId)
+        .eq("alert_type", alertType)
+        .is_("resolved_at", "null")
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def createDomainAlert(domainId: str, alertType: str):
+    supabase.table("domain_alerts").insert({
+        "domain_id": domainId,
+        "alert_type": alertType,
+    }).execute()
+    print(f"[domain-alert] OPENED {alertType} for domain {domainId}")
+
+
+EXPIRY_WARNING_THRESHOLDS = [30, 14, 7, 1]  # days before expiry to warn
+
+
+async def evaluateDomain(domain: dict):
+    domainId = domain["id"]
+    domainName = domain["domain_name"]
+    userId = domain["user_id"]
+
+    expiryDate, issuer, error = getSslInfo(domainName)
+
+    if error:
+        print(f"[domain-check] {domainName} -> ERROR: {error}")
+        recordDomainCheck(domainId, None, None)
+        return
+
+    recordDomainCheck(domainId, expiryDate, issuer)
+    daysLeft = (expiryDate - date.today()).days
+    print(f"[domain-check] {domainName} -> SSL expires {expiryDate} ({daysLeft} days left, issuer: {issuer})")
+
+    for threshold in EXPIRY_WARNING_THRESHOLDS:
+        alertType = f"ssl_expiry_{threshold}d"
+        if daysLeft <= threshold:
+            existingAlert = getOpenDomainAlert(domainId, alertType)
+            if not existingAlert:
+                createDomainAlert(domainId, alertType)
+                publishEvent(userId, "domain_expiry_warning", None, {
+                    "domain_id": domainId,
+                    "days_left": daysLeft,
+                })
+            break  # only fire the most urgent applicable threshold
 
 def getOpenIncident(siteId: str):
     result = (
@@ -116,39 +198,61 @@ async def evaluateSite(client: httpx.AsyncClient, site: dict):
 lastCheckedAt = {}  # in-memory: {site_id: datetime of last check}
 TICK_INTERVAL = 5   # how often the loop wakes up to check what's due
 
+lastDomainCheckedAt = {}
+DOMAIN_CHECK_INTERVAL = 3600  # check SSL once per hour per domain — no need for frequent checks
+
 
 async def runCheckLoop():
     async with httpx.AsyncClient() as client:
         while True:
             sitesResult = (
-            supabase.table("sites")
-            .select("id, url, check_interval_seconds, user_id")
-            .eq("is_active", True)
-            .execute()
+                supabase.table("sites")
+                .select("id, url, check_interval_seconds, user_id")
+                .eq("is_active", True)
+                .execute()
             )
             sites = sitesResult.data
 
-            now = datetime.now(timezone.utc)
-            dueSites = []
+            domainsResult = (
+                supabase.table("domains")
+                .select("id, domain_name, user_id")
+                .execute()
+            )
+            domains = domainsResult.data
 
+            now = datetime.now(timezone.utc)
+
+            dueSites = []
             for site in sites:
                 siteId = site["id"]
                 intervalSeconds = site.get("check_interval_seconds", 60)
                 lastRun = lastCheckedAt.get(siteId)
-
                 if lastRun is None or (now - lastRun).total_seconds() >= intervalSeconds:
                     dueSites.append(site)
+
+            dueDomains = []
+            for domain in domains:
+                domainId = domain["id"]
+                lastRun = lastDomainCheckedAt.get(domainId)
+                if lastRun is None or (now - lastRun).total_seconds() >= DOMAIN_CHECK_INTERVAL:
+                    dueDomains.append(domain)
 
             if dueSites:
                 tasks = [evaluateSite(client, site) for site in dueSites]
                 await asyncio.gather(*tasks)
                 for site in dueSites:
                     lastCheckedAt[site["id"]] = datetime.now(timezone.utc)
-            else:
-                print("[worker] no sites due for check yet...")
+
+            if dueDomains:
+                domainTasks = [evaluateDomain(domain) for domain in dueDomains]
+                await asyncio.gather(*domainTasks)
+                for domain in dueDomains:
+                    lastDomainCheckedAt[domain["id"]] = datetime.now(timezone.utc)
+
+            if not dueSites and not dueDomains:
+                print("[worker] nothing due for check yet...")
 
             await asyncio.sleep(TICK_INTERVAL)
-
 
 if __name__ == "__main__":
     print("[worker] starting checker worker...")
