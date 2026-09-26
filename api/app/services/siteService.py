@@ -81,8 +81,33 @@ async def getSite(userId: str, siteId: str):
         .eq("id", siteId)
         .execute()
     )
-    return result.data[0] if result.data else None
+    if not result.data:
+        return None
 
+    site = result.data[0]
+
+    checksResult = (
+        supabaseClient.table("checks")
+        .select("status, response_time_ms, checked_at")
+        .eq("site_id", siteId)
+        .order("checked_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+
+    incidentsResult = (
+        supabaseClient.table("incidents")
+        .select("*")
+        .eq("site_id", siteId)
+        .order("started_at", desc=True)
+        .execute()
+    )
+
+    return {
+        **site,
+        "recent_checks": checksResult.data,
+        "incidents": incidentsResult.data,
+    }
 
 async def updateSite(userId: str, siteId: str, payload):
     updates = {k: v for k, v in payload.dict().items() if v is not None}

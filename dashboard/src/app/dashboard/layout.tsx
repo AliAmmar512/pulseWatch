@@ -2,8 +2,9 @@ import Link from "next/link";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Domains & SSL", href: "/domains" },
-  { label: "Incidents", href: "/incidents" },
+  { label: "Domains & SSL", href: "/dashboard/domains" },
+  { label: "Incidents", href: "/dashboard/incidents" },
+  { label: "Status Pages", href: "/dashboard/status-pages" },
 ];
 
 export default function DashboardLayout({

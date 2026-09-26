@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/api";
 import { useLiveEvents } from "@/lib/useLiveEvents";
 import { AddSiteModal } from "@/components/AddSiteModal";
+import Link from "next/link";
 
 type Site = {
   id: string;
@@ -109,9 +110,10 @@ export default function DashboardPage() {
 
           <div className="bg-surface rounded-2xl overflow-hidden">
             {sites.map((site, i) => (
-              <div
+              <Link
                 key={site.id}
-                className="flex items-center justify-between px-6 py-4"
+                href={`/dashboard/sites/${site.id}`}
+                className="flex items-center justify-between px-6 py-4 hover:bg-surface-raised transition-colors"
                 style={{ borderTop: i === 0 ? "none" : "1px solid #0D0F14" }}
               >
                 <div>
@@ -137,7 +139,7 @@ export default function DashboardPage() {
                     {statusLabel[site.current_status]}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </>
