@@ -1,12 +1,12 @@
-from supabase import create_client
-from app.config import supabaseUrl, supabaseServiceKey
+﻿from app.supabaseClient import getSupabaseClient
+from typing import Dict, Any, List, Optional
 
-supabaseClient = create_client(supabaseUrl, supabaseServiceKey)
-
-
-async def createStatusPage(userId: str, payload):
+async def createStatusPage(userId: str, payload: Any) -> Dict[str, Any]:
+    """
+    Create a new status page linked to the specified sites.
+    """
     ownedSites = (
-        supabaseClient.table("sites")
+        await getSupabaseClient().table("sites")
         .select("id")
         .eq("user_id", userId)
         .in_("id", payload.site_ids)
@@ -17,7 +17,7 @@ async def createStatusPage(userId: str, payload):
         raise ValueError("One or more sites do not belong to this user")
 
     pageResult = (
-        supabaseClient.table("status_pages")
+        await getSupabaseClient().table("status_pages")
         .insert({
             "user_id": userId,
             "slug": payload.slug,
@@ -28,28 +28,39 @@ async def createStatusPage(userId: str, payload):
     page = pageResult.data[0]
 
     linkRows = [{"status_page_id": page["id"], "site_id": siteId} for siteId in payload.site_ids]
-    supabaseClient.table("status_page_sites").insert(linkRows).execute()
+    await getSupabaseClient().table("status_page_sites").insert(linkRows).execute()
 
     return page
 
 
-async def listStatusPages(userId: str):
+async def listStatusPages(userId: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+    """
+    List all status pages for a user with pagination.
+    """
     result = (
-        supabaseClient.table("status_pages")
+        await getSupabaseClient().table("status_pages")
         .select("*")
         .eq("user_id", userId)
+        .range(offset, offset + limit - 1)
         .execute()
     )
     return result.data
 
 
-async def deleteStatusPage(userId: str, pageId: str):
-    supabaseClient.table("status_pages").delete().eq("user_id", userId).eq("id", pageId).execute()
+async def deleteStatusPage(userId: str, pageId: str) -> None:
+    """
+    Delete a status page by ID.
+    """
+    await getSupabaseClient().table("status_pages").delete().eq("user_id", userId).eq("id", pageId).execute()
 
 
-async def getPublicStatusPage(slug: str):
+async def getPublicStatusPage(slug: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a public status page by slug.
+    Batch-fetches associated sites, latest checks, and 30-day summaries to avoid N+1 queries.
+    """
     pageResult = (
-        supabaseClient.table("status_pages")
+        await getSupabaseClient().table("status_pages")
         .select("id, slug, is_public")
         .eq("slug", slug)
         .eq("is_public", True)
@@ -61,7 +72,7 @@ async def getPublicStatusPage(slug: str):
     page = pageResult.data[0]
 
     linkedSites = (
-        supabaseClient.table("status_page_sites")
+        await getSupabaseClient().table("status_page_sites")
         .select("site_id")
         .eq("status_page_id", page["id"])
         .execute()
@@ -72,38 +83,49 @@ async def getPublicStatusPage(slug: str):
         return {"slug": page["slug"], "sites": []}
 
     sitesResult = (
-        supabaseClient.table("sites")
+        await getSupabaseClient().table("sites")
         .select("id, name")
         .in_("id", siteIds)
         .execute()
     )
+    sitesData = {site["id"]: {"name": site["name"], "current_status": "unknown", "uptimeValues": []} for site in sitesResult.data}
+
+    checksResult = (
+        await getSupabaseClient().table("checks")
+        .select("site_id, status, checked_at")
+        .in_("site_id", siteIds)
+        .order("checked_at", desc=True)
+        .execute()
+    )
+    
+    seenSites = set()
+    for check in checksResult.data:
+        s_id = check["site_id"]
+        if s_id not in seenSites and s_id in sitesData:
+            sitesData[s_id]["current_status"] = check["status"]
+            seenSites.add(s_id)
+
+    summaryResult = (
+        await getSupabaseClient().table("daily_uptime_summary")
+        .select("site_id, uptime_pct")
+        .in_("site_id", siteIds)
+        .order("day", desc=True)
+        .execute()
+    )
+    
+    for row in summaryResult.data:
+        s_id = row["site_id"]
+        if s_id in sitesData:
+            if len(sitesData[s_id]["uptimeValues"]) < 30:
+                sitesData[s_id]["uptimeValues"].append(row["uptime_pct"])
 
     sitesOut = []
-    for site in sitesResult.data:
-        latestCheck = (
-            supabaseClient.table("checks")
-            .select("status")
-            .eq("site_id", site["id"])
-            .order("checked_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        currentStatus = latestCheck.data[0]["status"] if latestCheck.data else "unknown"
-
-        summary = (
-            supabaseClient.table("daily_uptime_summary")
-            .select("uptime_pct")
-            .eq("site_id", site["id"])
-            .order("day", desc=True)
-            .limit(30)
-            .execute()
-        )
-        uptimeValues = [row["uptime_pct"] for row in summary.data]
+    for s_id, data in sitesData.items():
+        uptimeValues = data["uptimeValues"]
         avgUptime = sum(uptimeValues) / len(uptimeValues) if uptimeValues else None
-
         sitesOut.append({
-            "name": site["name"],
-            "current_status": currentStatus,
+            "name": data["name"],
+            "current_status": data["current_status"],
             "uptime_30d": avgUptime,
         })
 

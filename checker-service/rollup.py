@@ -1,11 +1,18 @@
 from datetime import date, timedelta, datetime, timezone
+
 from supabase import create_client
+
 from config import supabaseUrl, supabaseSecretKey
 
 supabase = create_client(supabaseUrl, supabaseSecretKey)
 
 
 def computeDailySummaryForSite(siteId: str, targetDay: date):
+    """
+    Compute and return the daily summary for a given site on a specific day.
+    
+    Includes uptime percentage, average response time, and total checks.
+    """
     dayStart = datetime.combine(targetDay, datetime.min.time()).replace(tzinfo=timezone.utc)
     dayEnd = dayStart + timedelta(days=1)
 
@@ -39,6 +46,11 @@ def computeDailySummaryForSite(siteId: str, targetDay: date):
 
 
 def runRollup(targetDay: date = None):
+    """
+    Run the rollup job to generate and save daily summaries for all sites.
+    
+    Defaults to processing data for yesterday if no date is provided.
+    """
     if targetDay is None:
         targetDay = date.today() - timedelta(days=1)  # default: yesterday
 

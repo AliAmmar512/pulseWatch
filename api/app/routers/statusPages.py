@@ -15,8 +15,8 @@ async def createStatusPage(payload: StatusPageCreate, userId: str = Depends(getC
 
 
 @router.get("/status-pages")
-async def listStatusPages(userId: str = Depends(getCurrentUser)):
-    return await statusPageService.listStatusPages(userId)
+async def listStatusPages(limit: int = 50, offset: int = 0, userId: str = Depends(getCurrentUser)):
+    return await statusPageService.listStatusPages(userId, limit=limit, offset=offset)
 
 
 @router.delete("/status-pages/{pageId}", status_code=204)

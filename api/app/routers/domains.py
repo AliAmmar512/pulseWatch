@@ -15,8 +15,8 @@ async def addDomain(payload: DomainCreate, userId: str = Depends(getCurrentUser)
 
 
 @router.get("")
-async def listDomains(userId: str = Depends(getCurrentUser)):
-    return await domainService.listDomains(userId)
+async def listDomains(limit: int = 50, offset: int = 0, userId: str = Depends(getCurrentUser)):
+    return await domainService.listDomains(userId, limit=limit, offset=offset)
 
 
 @router.get("/{domainId}")

@@ -15,8 +15,8 @@ async def addSite(payload: SiteCreate, userId: str = Depends(getCurrentUser)):
 
 
 @router.get("")
-async def listSites(userId: str = Depends(getCurrentUser)):
-    return await siteService.listSites(userId)
+async def listSites(limit: int = 50, offset: int = 0, userId: str = Depends(getCurrentUser)):
+    return await siteService.listSites(userId, limit=limit, offset=offset)
 
 
 @router.get("/{siteId}")

@@ -52,15 +52,17 @@ export default function StatusPagesPage() {
   };
 
   return (
-    <main className="min-h-screen px-8 py-10 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-1">Status Pages</h1>
-      <p className="text-on-surface-variant text-sm mb-8">
-        Create shareable public pages for your clients
-      </p>
+    <main className="px-10 py-10 max-w-3xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Status Pages</h1>
+        <p className="text-on-surface-variant text-sm mt-1">
+          Create shareable public pages for your clients
+        </p>
+      </div>
 
-      <form onSubmit={handleCreate} className="bg-surface rounded-2xl p-6 mb-8 flex flex-col gap-4">
+      <form onSubmit={handleCreate} className="bg-surface rounded-2xl p-6 mb-6 flex flex-col gap-4">
         <div>
-          <label className="text-sm text-on-surface-variant mb-1 block">Page slug</label>
+          <label className="text-sm text-on-surface-variant mb-1.5 block">Page slug</label>
           <input
             type="text"
             value={slug}
@@ -75,11 +77,12 @@ export default function StatusPagesPage() {
           <label className="text-sm text-on-surface-variant mb-2 block">Sites to include</label>
           <div className="flex flex-col gap-2">
             {sites.map((site) => (
-              <label key={site.id} className="flex items-center gap-2 text-sm">
+              <label key={site.id} className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={selectedSiteIds.includes(site.id)}
                   onChange={() => toggleSite(site.id)}
+                  className="accent-[#8B7CFF]"
                 />
                 {site.name}
               </label>
@@ -92,32 +95,40 @@ export default function StatusPagesPage() {
         <button
           type="submit"
           disabled={submitting || selectedSiteIds.length === 0}
-          className="bg-primary text-on-primary text-sm font-medium py-2 rounded-lg hover:brightness-110 disabled:opacity-50"
+          className="bg-primary text-on-primary text-sm font-medium py-2.5 rounded-lg hover:brightness-110 disabled:opacity-50"
         >
-          Create status page
+          {submitting ? "Creating..." : "Create status page"}
         </button>
       </form>
 
       {loading && <p className="text-on-surface-variant">Loading...</p>}
 
-      <div className="bg-surface rounded-2xl overflow-hidden">
-        {pages.map((page, i) => (
-          <div
-            key={page.id}
-            className="flex items-center justify-between px-6 py-4"
-            style={{ borderTop: i === 0 ? "none" : "1px solid #0D0F14" }}
-          >
-            <span className="text-sm font-medium">{page.slug}</span>
-            <a
-              href={`/status/${page.slug}`}
-              target="_blank"
-              className="text-xs text-primary hover:underline"
+      {!loading && pages.length === 0 && (
+        <div className="bg-surface rounded-2xl p-10 text-center">
+          <p className="text-on-surface-variant">No status pages yet.</p>
+        </div>
+      )}
+
+      {pages.length > 0 && (
+        <div className="bg-surface rounded-2xl overflow-hidden">
+          {pages.map((page, i) => (
+            <div
+              key={page.id}
+              className="flex items-center justify-between px-6 py-4"
+              style={{ borderTop: i === 0 ? "none" : "1px solid #0D0F14" }}
             >
-              View public page -&gt;
-            </a>
-          </div>
-        ))}
-      </div>
+              <span className="text-sm font-medium font-mono">/{page.slug}</span>
+              <a
+                href={`/status/${page.slug}`}
+                target="_blank"
+                className="text-xs text-primary hover:underline"
+              >
+                View public page &rarr;
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
