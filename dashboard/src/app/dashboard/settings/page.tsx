@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { PageHeader } from "@/components/PageHeader";
 
 export default function SettingsPage() {
   const [email, setEmail] = useState("");
@@ -11,6 +12,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState(false);
 
   const [togglingAlerts, setTogglingAlerts] = useState(false);
 
@@ -35,8 +37,10 @@ export default function SettingsPage() {
     setPasswordSaving(false);
 
     if (error) {
+      setPasswordError(true);
       setPasswordMessage(error.message);
     } else {
+      setPasswordError(false);
       setPasswordMessage("Password updated.");
       setNewPassword("");
     }
@@ -56,23 +60,31 @@ export default function SettingsPage() {
     setTogglingAlerts(false);
   };
 
-  if (loading) return <main className="p-10 text-on-surface-variant">Loading...</main>;
+  if (loading) {
+    return (
+      <main className="px-4 md:px-10 py-10 text-on-surface-variant text-sm">
+        Loading...
+      </main>
+    );
+  }
 
   return (
-    <main className="min-h-screen px-8 py-10 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-1">Settings</h1>
-      <p className="text-on-surface-variant text-sm mb-8">
-        Manage your account and notification preferences
-      </p>
+    <main className="px-4 md:px-10 py-8 md:py-10 max-w-2xl mx-auto">
+      <PageHeader
+        title="Settings"
+        description="Account access and email notifications for incidents and SSL warnings."
+      />
 
       <div className="bg-surface rounded-2xl p-6 mb-6">
-        <p className="text-sm font-medium mb-1">Account</p>
-        <p className="text-sm text-on-surface-variant">{email}</p>
+        <p className="text-xs uppercase tracking-wider text-on-surface-variant font-mono mb-2">
+          Account
+        </p>
+        <p className="text-sm font-medium">{email || "Unknown user"}</p>
       </div>
 
       <div className="bg-surface rounded-2xl p-6 mb-6">
         <p className="text-sm font-medium mb-3">Change password</p>
-        <form onSubmit={handlePasswordChange} className="flex gap-2">
+        <form onSubmit={handlePasswordChange} className="flex flex-col sm:flex-row gap-2">
           <input
             type="password"
             value={newPassword}
@@ -91,21 +103,27 @@ export default function SettingsPage() {
           </button>
         </form>
         {passwordMessage && (
-          <p className="text-xs text-on-surface-variant mt-2">{passwordMessage}</p>
+          <p
+            className={`text-xs mt-2 ${passwordError ? "text-danger" : "text-success"}`}
+          >
+            {passwordMessage}
+          </p>
         )}
       </div>
 
-      <div className="bg-surface rounded-2xl p-6 flex items-center justify-between">
+      <div className="bg-surface rounded-2xl p-6 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium">Email alerts</p>
           <p className="text-xs text-on-surface-variant mt-0.5">
-            Get notified when a site goes down or an SSL cert is expiring
+            Notify you when a site goes down or an SSL certificate is expiring.
           </p>
         </div>
         <button
+          type="button"
           onClick={handleToggleAlerts}
           disabled={togglingAlerts}
-          className="w-11 h-6 rounded-full relative transition-colors disabled:opacity-50"
+          aria-pressed={alertsEnabled}
+          className="w-11 h-6 rounded-full relative transition-colors disabled:opacity-50 shrink-0"
           style={{ backgroundColor: alertsEnabled ? "#8B7CFF" : "#5A6072" }}
         >
           <span

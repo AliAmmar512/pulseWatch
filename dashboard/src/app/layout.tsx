@@ -1,34 +1,31 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import type { ReactNode } from "react";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-plus-jakarta",
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
-  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
   title: "Pulsewatch",
-  description: "Live uptime, DNS/SSL, and performance monitoring for freelance developers and agencies.",
+  description: "Live uptime, SSL, and domain monitoring for agencies",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${plusJakarta.variable} ${jetbrainsMono.variable} bg-background text-on-surface font-sans antialiased`}>
-        {children}
-      </body>
+    <html lang="en" className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
+      <body className="antialiased font-sans">{children}</body>
     </html>
   );
 }
