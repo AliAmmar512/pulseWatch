@@ -15,8 +15,12 @@ node_modules/
 *.log
 CLAUDE.md
 AGENTS.md
+.venv/
+**/node_modules/
 
 stitch_pulsewatch_uptime_monitoring_dashboard/
 
 pulsewatch-project-brief.md
 how --stat HEAD.md
+
+how --stat HEAD
