@@ -1,11 +1,12 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.routers import sites, domains, incidents, statusPages
 from app.websocket.manager import manager
 from app.websocket.listener import startListener
+from app.websocket.tickets import issueTicket, consumeTicket
 from app.config import corsOrigins
-from app.dependencies.auth import validateToken
+from app.dependencies.auth import getCurrentUser
 from app.supabaseClient import initSupabase
 
 @asynccontextmanager
@@ -33,11 +34,15 @@ app.include_router(statusPages.router)
 async def health():
     return {"status": "ok"}
 
+@app.post("/ws/ticket")
+async def createWsTicket(userId: str = Depends(getCurrentUser)):
+    return {"ticket": issueTicket(userId)}
+
+
 @app.websocket("/ws")
-async def websocketEndpoint(websocket: WebSocket, token: str = Query(...)):
-    try:
-        userId = await validateToken(token)
-    except Exception:
+async def websocketEndpoint(websocket: WebSocket, ticket: str = Query(...)):
+    userId = consumeTicket(ticket)
+    if userId is None:
         await websocket.close(code=1008)
         return
 

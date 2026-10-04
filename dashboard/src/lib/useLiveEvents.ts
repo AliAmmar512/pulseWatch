@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { supabase } from "./supabase";
+import { apiPost } from "./api";
 
 type LiveEvent = {
   type: string;
@@ -21,12 +21,17 @@ export function useLiveEvents(onEvent: (event: LiveEvent) => void) {
     let timeoutId: ReturnType<typeof setTimeout>;
 
     async function connect() {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token || cancelled) return;
+      let ticket: string;
+      try {
+        const res = await apiPost("/ws/ticket", {});
+        ticket = res.ticket;
+      } catch {
+        return;
+      }
+      if (cancelled) return;
 
       const wsUrl = process.env.NEXT_PUBLIC_API_URL!.replace("http", "ws");
-      const ws = new WebSocket(`${wsUrl}/ws?token=${token}`);
+      const ws = new WebSocket(`${wsUrl}/ws?ticket=${ticket}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
