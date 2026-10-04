@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.dependencies.auth import getCurrentUser
 from app.schemas.domain import DomainCreate
 from app.services import domainService
@@ -15,7 +15,11 @@ async def addDomain(payload: DomainCreate, userId: str = Depends(getCurrentUser)
 
 
 @router.get("")
-async def listDomains(limit: int = 50, offset: int = 0, userId: str = Depends(getCurrentUser)):
+async def listDomains(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    userId: str = Depends(getCurrentUser),
+):
     return await domainService.listDomains(userId, limit=limit, offset=offset)
 
 

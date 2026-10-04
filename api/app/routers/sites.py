@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.dependencies.auth import getCurrentUser
 from app.schemas.site import SiteCreate, SiteUpdate
 from app.services import siteService
@@ -15,7 +15,11 @@ async def addSite(payload: SiteCreate, userId: str = Depends(getCurrentUser)):
 
 
 @router.get("")
-async def listSites(limit: int = 50, offset: int = 0, userId: str = Depends(getCurrentUser)):
+async def listSites(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    userId: str = Depends(getCurrentUser),
+):
     return await siteService.listSites(userId, limit=limit, offset=offset)
 
 
